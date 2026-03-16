@@ -1,0 +1,1 @@
+"""LocalAi — Configuration package."""

@@ -1,0 +1,27 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "log_level": "info"
+  },
+  "inference": {
+    "llama_server_port": 8081,
+    "llama_server_bin": "bin/llama-server.exe",
+    "request_timeout_seconds": 120,
+    "max_queue_depth": 20
+  },
+  "vram": {
+    "safety_margin_mb": 300,
+    "runtime_overhead_mb": 200
+  },
+  "models": {
+    "models_dir": "models",
+    "auto_load_on_startup": false,
+    "default_model": ""
+  },
+  "logging": {
+    "log_dir": "logs",
+    "rotation": "daily",
+    "retention_days": 30
+  }
+}

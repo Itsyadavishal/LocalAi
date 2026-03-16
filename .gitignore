@@ -1,0 +1,45 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.*
+
+# Logs (generated at runtime)
+logs/*.log
+models/*/logs/*.log
+models/*/metrics/*.db
+
+# Model weights (never commit large binary files)
+models/*/weights/*.gguf
+models/*/vision/*.gguf
+
+# Checksums are committed (small, important)
+# models/*/weights/*.sha256  ← do NOT ignore these
+
+# Runtime data
+data/*.pid
+data/server.state.json
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# llama.cpp binaries (too large, install separately)
+bin/*.exe

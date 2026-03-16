@@ -1,0 +1,2 @@
+llama.cpp binary directory.
+Place llama-server.exe and llama-cli.exe here.
