@@ -8,6 +8,7 @@ import sys
 from fastapi import FastAPI, Request
 from rich import print as rich_print
 
+from server.api.admin import router as admin_router
 from server.config.config_loader import load_config
 from server.config.schemas import LocalAiConfig
 from server.core.inference_engine import engine
@@ -132,6 +133,8 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
         await app_instance.state.request_handler.stop()
         if app_instance.state.model_manager.get_loaded_model_id():
             await app_instance.state.model_manager.unload_model()
+        else:
+            logger.info("no model loaded during shutdown")
         shutdown_gpu()
         logger.info("application shutdown complete")
 
@@ -142,6 +145,7 @@ app = FastAPI(
     description=APP_DESCRIPTION,
     lifespan=lifespan,
 )
+app.include_router(admin_router)
 
 
 @app.get("/health")
@@ -182,10 +186,13 @@ if __name__ == "__main__":
     import uvicorn
 
     config = load_runtime_config_or_exit()
-    uvicorn.run(
-        "server.main:app",
+    uvicorn_config = uvicorn.Config(
+        app=app,
         host=config.server.host,
         port=config.server.port,
         log_level=config.server.log_level,
         reload=False,
     )
+    uvicorn_server = uvicorn.Server(uvicorn_config)
+    app.state.uvicorn_server = uvicorn_server
+    uvicorn_server.run()
