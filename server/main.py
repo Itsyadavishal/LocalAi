@@ -8,7 +8,7 @@ import sys
 from fastapi import FastAPI, Request
 from rich import print as rich_print
 
-from server.api.admin import router as admin_router
+from server.api.router import register_routers
 from server.config.config_loader import load_config
 from server.config.schemas import LocalAiConfig
 from server.core.inference_engine import engine
@@ -145,7 +145,7 @@ app = FastAPI(
     description=APP_DESCRIPTION,
     lifespan=lifespan,
 )
-app.include_router(admin_router)
+register_routers(app)
 
 
 @app.get("/health")
@@ -164,35 +164,19 @@ async def health_endpoint(request: Request) -> dict[str, object]:
     }
 
 
-@app.get("/v1/models")
-async def list_models_endpoint(request: Request) -> dict[str, object]:
-    """Return discovered models using the OpenAI-style models list format."""
-    models = request.app.state.model_manager.list_models()
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": model.model_id,
-                "object": "model",
-                "owned_by": "localai",
-                "capabilities": [capability.value for capability in model.config.capabilities],
-            }
-            for model in models
-        ],
-    }
-
-
 if __name__ == "__main__":
     import uvicorn
 
     config = load_runtime_config_or_exit()
-    uvicorn_config = uvicorn.Config(
-        app=app,
-        host=config.server.host,
-        port=config.server.port,
-        log_level=config.server.log_level,
-        reload=False,
+    # Uvicorn: always use app=app form. See RULES.md section 10.
+    uvicorn_server = uvicorn.Server(
+        uvicorn.Config(
+            app=app,
+            host=config.server.host,
+            port=config.server.port,
+            log_level=config.server.log_level,
+            reload=False,
+        )
     )
-    uvicorn_server = uvicorn.Server(uvicorn_config)
     app.state.uvicorn_server = uvicorn_server
     uvicorn_server.run()
