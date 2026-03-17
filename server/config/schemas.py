@@ -1,5 +1,6 @@
 """Pydantic schemas for validating LocalAi configuration files."""
 
+from enum import Enum
 from typing import ClassVar, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -127,3 +128,56 @@ class LocalAiConfig(BaseModel):
         if self.server.port == self.inference.llama_server_port:
             raise ValueError("server.port and inference.llama_server_port must be different")
         return self
+
+
+class ModelCapability(str, Enum):
+    """Enumeration of capabilities a model may support."""
+
+    TEXT = "text"
+    VISION = "vision"
+    CODE = "code"
+
+
+class ModelConfig(BaseModel):
+    """Per-model configuration loaded from model.config.json."""
+
+    model_id: str = Field(description="Unique identifier matching the model folder name.")
+    display_name: str = Field(description="Human-readable display name for the model.")
+    gguf_filename: str = Field(description="Weights filename stored under the weights subdirectory.")
+    mmproj_filename: str | None = Field(
+        default=None,
+        description="Optional vision projector filename stored under the vision subdirectory.",
+    )
+    ctx_size: int = Field(default=4096, ge=512, le=131072, description="Recommended context window size.")
+    gpu_layers: int = Field(
+        default=32,
+        ge=0,
+        le=200,
+        description="Recommended GPU layer count for runtime loading decisions.",
+    )
+    max_tokens: int = Field(
+        default=2048,
+        ge=1,
+        le=32768,
+        description="Maximum tokens allowed in a single model response.",
+    )
+    capabilities: list[ModelCapability] = Field(
+        default_factory=lambda: [ModelCapability.TEXT],
+        description="Capabilities exposed by the model.",
+    )
+    vram_estimate_mb: int = Field(
+        default=0,
+        ge=0,
+        description="Optional manual VRAM estimate in megabytes. Zero uses automatic estimation.",
+    )
+
+    @field_validator("model_id")
+    @classmethod
+    def model_id_no_spaces(cls, value: str) -> str:
+        """Ensure model identifiers do not contain spaces."""
+        if " " in value:
+            raise ValueError("model_id must not contain spaces")
+        return value
+
+
+# model.config.json loading is handled in config_loader.py
