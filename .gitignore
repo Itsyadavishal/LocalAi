@@ -15,11 +15,14 @@ build/
 .env.*
 
 # Logs (generated at runtime)
-logs/*.log
+logs/*
+!logs/.gitkeep
 models/*/logs/*.log
 models/*/metrics/*.db
 
-# Model weights (never commit large binary files)
+# Model assets (never commit large binary files or bundled docs)
+models/*.gguf
+models/*.md
 models/*/weights/*.gguf
 models/*/vision/*.gguf
 
