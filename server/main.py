@@ -10,20 +10,16 @@ from rich import print as rich_print
 
 from server.config.config_loader import load_config
 from server.config.schemas import LocalAiConfig
+from server.utils.gpu_utils import get_vram_info, init_gpu, shutdown_gpu
+from server.utils.logger import get_logger, setup_logging
 
 APP_TITLE = "LocalAi"
 APP_VERSION = "0.1.0"
 APP_DESCRIPTION = "Local AI inference infrastructure"
 CONFIG_FILE_NAME = "localai.config.json"
-STARTUP_BANNER = (
-    "┌─────────────────────────────────────┐\n"
-    "│  LocalAi v0.1.0                     │\n"
-    "│  Status:  Starting...               │\n"
-    "│  Host:    {host:<27}│\n"
-    "│  Port:    {port:<27}│\n"
-    "└─────────────────────────────────────┘"
-)
-SHUTDOWN_MESSAGE = "LocalAi shutting down...\n"
+BANNER_CONTENT_WIDTH = 33
+
+logger = get_logger(__name__)
 
 
 def resolve_config_path() -> Path:
@@ -50,9 +46,30 @@ def load_runtime_config_or_exit() -> LocalAiConfig:
         raise SystemExit(1) from error
 
 
+def build_banner_line(content: str) -> str:
+    """Format a single banner line to the fixed output width."""
+    trimmed_content = content[:BANNER_CONTENT_WIDTH]
+    return f"│  {trimmed_content:<{BANNER_CONTENT_WIDTH}}│"
+
+
 def print_startup_banner(config: LocalAiConfig) -> None:
-    """Render the startup banner with the resolved host and port."""
-    banner = STARTUP_BANNER.format(host=config.server.host, port=config.server.port)
+    """Render the startup banner with host and GPU information."""
+    vram = get_vram_info()
+    host_line = build_banner_line(f"Host:  {config.server.host}:{config.server.port}")
+    gpu_line = build_banner_line(f"GPU:   {vram.gpu_name}")
+    vram_free_line = build_banner_line(f"VRAM:  {vram.free_mb}MB free of")
+    vram_total_line = build_banner_line(f"       {vram.total_mb}MB")
+    banner = "\n".join(
+        [
+            "┌─────────────────────────────────────┐",
+            build_banner_line(f"LocalAi v{APP_VERSION}"),
+            host_line,
+            gpu_line,
+            vram_free_line,
+            vram_total_line,
+            "└─────────────────────────────────────┘",
+        ]
+    )
     rich_print(banner)
 
 
@@ -65,12 +82,32 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
         write_error(str(error))
         raise
 
+    setup_logging(log_level=config.server.log_level, log_dir=config.logging.log_dir)
     app_instance.state.config = config
+    logger.info(
+        "logging initialized",
+        log_level=config.server.log_level,
+        log_dir=config.logging.log_dir,
+    )
+
+    gpu_available = init_gpu()
+    app_instance.state.gpu_available = gpu_available
     print_startup_banner(config)
+    vram = get_vram_info()
+    logger.info(
+        "application startup complete",
+        host=config.server.host,
+        port=config.server.port,
+        gpu_available=gpu_available,
+        gpu_name=vram.gpu_name,
+        free_mb=vram.free_mb,
+        total_mb=vram.total_mb,
+    )
     try:
         yield
     finally:
-        sys.stdout.write(SHUTDOWN_MESSAGE)
+        shutdown_gpu()
+        logger.info("application shutdown complete")
 
 
 app = FastAPI(
@@ -83,14 +120,15 @@ app = FastAPI(
 
 @app.get("/health")
 async def health_endpoint(request: Request) -> dict[str, object]:
-    """Return a placeholder health response for the bootstrap phase."""
+    """Return the current service health and VRAM snapshot."""
     _ = request.app.state.config
+    vram = get_vram_info()
     return {
         "status": "ok",
         "version": APP_VERSION,
         "model_loaded": False,
-        "vram_used_mb": 0,
-        "vram_total_mb": 0,
+        "vram_used_mb": vram.used_mb,
+        "vram_total_mb": vram.total_mb,
         "queue_depth": 0,
     }
 
