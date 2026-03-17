@@ -10,6 +10,8 @@ from rich import print as rich_print
 
 from server.config.config_loader import load_config
 from server.config.schemas import LocalAiConfig
+from server.core.inference_engine import engine
+from server.core.model_manager import ModelManager
 from server.utils.gpu_utils import get_vram_info, init_gpu, shutdown_gpu
 from server.utils.logger import get_logger, setup_logging
 
@@ -49,7 +51,7 @@ def load_runtime_config_or_exit() -> LocalAiConfig:
 def build_banner_line(content: str) -> str:
     """Format a single banner line to the fixed output width."""
     trimmed_content = content[:BANNER_CONTENT_WIDTH]
-    return f"│  {trimmed_content:<{BANNER_CONTENT_WIDTH}}│"
+    return f"|  {trimmed_content:<{BANNER_CONTENT_WIDTH}}|"
 
 
 def print_startup_banner(config: LocalAiConfig) -> None:
@@ -61,13 +63,13 @@ def print_startup_banner(config: LocalAiConfig) -> None:
     vram_total_line = build_banner_line(f"       {vram.total_mb}MB")
     banner = "\n".join(
         [
-            "┌─────────────────────────────────────┐",
+            "+-------------------------------------+",
             build_banner_line(f"LocalAi v{APP_VERSION}"),
             host_line,
             gpu_line,
             vram_free_line,
             vram_total_line,
-            "└─────────────────────────────────────┘",
+            "+-------------------------------------+",
         ]
     )
     rich_print(banner)
@@ -92,6 +94,18 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
 
     gpu_available = init_gpu()
     app_instance.state.gpu_available = gpu_available
+    model_manager = ModelManager(models_dir=config.models.models_dir, engine=engine)
+    app_instance.state.model_manager = model_manager
+    discovered = model_manager.discover_models()
+    logger.info("models discovered", count=len(discovered), models=discovered)
+
+    if config.models.auto_load_on_startup and config.models.default_model:
+        await model_manager.load_model(
+            config.models.default_model,
+            safety_margin_mb=config.vram.safety_margin_mb,
+            runtime_overhead_mb=config.vram.runtime_overhead_mb,
+        )
+
     print_startup_banner(config)
     vram = get_vram_info()
     logger.info(
@@ -106,6 +120,8 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if app_instance.state.model_manager.get_loaded_model_id():
+            await app_instance.state.model_manager.unload_model()
         shutdown_gpu()
         logger.info("application shutdown complete")
 
@@ -126,7 +142,7 @@ async def health_endpoint(request: Request) -> dict[str, object]:
     return {
         "status": "ok",
         "version": APP_VERSION,
-        "model_loaded": False,
+        "model_loaded": request.app.state.model_manager.get_loaded_model_id() is not None,
         "vram_used_mb": vram.used_mb,
         "vram_total_mb": vram.total_mb,
         "queue_depth": 0,
@@ -135,11 +151,19 @@ async def health_endpoint(request: Request) -> dict[str, object]:
 
 @app.get("/v1/models")
 async def list_models_endpoint(request: Request) -> dict[str, object]:
-    """Return the placeholder model listing for the bootstrap phase."""
-    _ = request.app.state.config
+    """Return discovered models using the OpenAI-style models list format."""
+    models = request.app.state.model_manager.list_models()
     return {
         "object": "list",
-        "data": [],
+        "data": [
+            {
+                "id": model.model_id,
+                "object": "model",
+                "owned_by": "localai",
+                "capabilities": [capability.value for capability in model.config.capabilities],
+            }
+            for model in models
+        ],
     }
 
 
