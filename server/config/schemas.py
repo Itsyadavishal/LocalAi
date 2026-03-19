@@ -180,4 +180,14 @@ class ModelConfig(BaseModel):
         return value
 
 
+class LoadModelRequest(BaseModel):
+    """Request body for POST /localai/models/load."""
+
+    model_id: str = Field(description="Requested model identifier to load.")
+    ctx_size: int | None = Field(
+        default=None,
+        description="Optional context size override. Uses model.config.json when omitted.",
+    )
+
+
 # model.config.json loading is handled in config_loader.py
