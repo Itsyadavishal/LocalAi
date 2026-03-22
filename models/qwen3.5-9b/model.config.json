@@ -1,0 +1,11 @@
+{
+  "model_id": "qwen3.5-9b",
+  "display_name": "Qwen 3.5 9B Q4_K_M",
+  "gguf_filename": "Qwen3.5-9B-Q4_K_M.gguf",
+  "mmproj_filename": "mmproj-9B-BF16.gguf",
+  "ctx_size": 4096,
+  "gpu_layers": 32,
+  "max_tokens": 2048,
+  "capabilities": ["text", "vision", "code"],
+  "vram_estimate_mb": 0
+}

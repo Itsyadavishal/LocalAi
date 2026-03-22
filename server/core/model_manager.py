@@ -193,6 +193,14 @@ class ModelManager:
     def resolve_model_id(self, requested: str) -> str | None:
         """Resolve a requested model name using exact, prefix, then substring matching.
 
+        Matching rules (in order):
+        1. Exact match.
+        2. Prefix match.
+        3. Substring match.
+
+        When multiple candidates exist, prefer the currently loaded model if it is
+        among the candidates. Otherwise return the shortest candidate.
+
         Args:
             requested: Requested model identifier fragment.
 
@@ -210,15 +218,21 @@ class ModelManager:
             if model_id.lower() == normalized_requested:
                 return model_id
 
-        prefix_matches = [model_id for model_id in self._installed if model_id.lower().startswith(normalized_requested)]
-        if prefix_matches:
-            return min(prefix_matches, key=len)
+        prefix_matches = [
+            model_id for model_id in self._installed if model_id.lower().startswith(normalized_requested)
+        ]
+        substring_matches = [] if prefix_matches else [
+            model_id for model_id in self._installed if normalized_requested in model_id.lower()
+        ]
+        candidates = prefix_matches or substring_matches
+        if not candidates:
+            return None
 
-        substring_matches = [model_id for model_id in self._installed if normalized_requested in model_id.lower()]
-        if substring_matches:
-            return min(substring_matches, key=len)
+        if self._loaded_model_id in candidates:
+            return self._loaded_model_id
 
-        return None
+        return min(candidates, key=len)
+
 
     async def load_model(
         self,

@@ -8,10 +8,12 @@ import sys
 from fastapi import FastAPI, Request
 from rich import print as rich_print
 
+from server.api.router import register_routers
 from server.config.config_loader import load_config
 from server.config.schemas import LocalAiConfig
 from server.core.inference_engine import engine
 from server.core.model_manager import ModelManager
+from server.core.request_handler import RequestHandler
 from server.utils.gpu_utils import get_vram_info, init_gpu, shutdown_gpu
 from server.utils.logger import get_logger, setup_logging
 
@@ -99,6 +101,14 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     discovered = model_manager.discover_models()
     logger.info("models discovered", count=len(discovered), models=discovered)
 
+    request_handler = RequestHandler(
+        llama_port=config.inference.llama_server_port,
+        max_queue_depth=config.inference.max_queue_depth,
+        default_timeout_seconds=config.inference.request_timeout_seconds,
+    )
+    await request_handler.start()
+    app_instance.state.request_handler = request_handler
+
     if config.models.auto_load_on_startup and config.models.default_model:
         await model_manager.load_model(
             config.models.default_model,
@@ -120,8 +130,11 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await app_instance.state.request_handler.stop()
         if app_instance.state.model_manager.get_loaded_model_id():
             await app_instance.state.model_manager.unload_model()
+        else:
+            logger.info("no model loaded during shutdown")
         shutdown_gpu()
         logger.info("application shutdown complete")
 
@@ -132,6 +145,7 @@ app = FastAPI(
     description=APP_DESCRIPTION,
     lifespan=lifespan,
 )
+register_routers(app)
 
 
 @app.get("/health")
@@ -139,31 +153,14 @@ async def health_endpoint(request: Request) -> dict[str, object]:
     """Return the current service health and VRAM snapshot."""
     _ = request.app.state.config
     vram = get_vram_info()
+    handler_stats = request.app.state.request_handler.get_stats()
     return {
         "status": "ok",
         "version": APP_VERSION,
         "model_loaded": request.app.state.model_manager.get_loaded_model_id() is not None,
         "vram_used_mb": vram.used_mb,
         "vram_total_mb": vram.total_mb,
-        "queue_depth": 0,
-    }
-
-
-@app.get("/v1/models")
-async def list_models_endpoint(request: Request) -> dict[str, object]:
-    """Return discovered models using the OpenAI-style models list format."""
-    models = request.app.state.model_manager.list_models()
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": model.model_id,
-                "object": "model",
-                "owned_by": "localai",
-                "capabilities": [capability.value for capability in model.config.capabilities],
-            }
-            for model in models
-        ],
+        "queue_depth": handler_stats["queue_depth"],
     }
 
 
@@ -171,10 +168,15 @@ if __name__ == "__main__":
     import uvicorn
 
     config = load_runtime_config_or_exit()
-    uvicorn.run(
-        "server.main:app",
-        host=config.server.host,
-        port=config.server.port,
-        log_level=config.server.log_level,
-        reload=False,
+    # Uvicorn: always use app=app form. See RULES.md section 10.
+    uvicorn_server = uvicorn.Server(
+        uvicorn.Config(
+            app=app,
+            host=config.server.host,
+            port=config.server.port,
+            log_level=config.server.log_level,
+            reload=False,
+        )
     )
+    app.state.uvicorn_server = uvicorn_server
+    uvicorn_server.run()

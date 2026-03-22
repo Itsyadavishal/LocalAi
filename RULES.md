@@ -90,3 +90,9 @@
 - model_manager.py reads llama_server_bin and llama_server_port
   directly from global config instead of constructor injection.
   Fix in Phase 3 refactor pass.
+
+## 10. Uvicorn Instantiation
+
+- Always use `uvicorn.Config(app=app, ...)` — never the string form
+  `"server.main:app"` when running via `python -m`. String form creates
+  a second module instance and breaks `app.state` references.

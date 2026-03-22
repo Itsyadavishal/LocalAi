@@ -21,13 +21,19 @@ models/*/logs/*.log
 models/*/metrics/*.db
 
 # Model assets (never commit large binary files or bundled docs)
-models/*.gguf
+models/**/*.gguf
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
+models/**/*.ckpt
 models/*.md
-models/*/weights/*.gguf
-models/*/vision/*.gguf
+models/*/model.README.md
+models/*/weights/*.md
+models/*/vision/*.md
 
 # Checksums are committed (small, important)
-# models/*/weights/*.sha256  ← do NOT ignore these
+# models/*/weights/*.sha256  <- do NOT ignore these
 
 # Runtime data
 data/*.pid
@@ -46,3 +52,5 @@ desktop.ini
 
 # llama.cpp binaries (too large, install separately)
 bin/*.exe
+bin/*.dll
+!bin/version.txt
