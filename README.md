@@ -58,14 +58,11 @@ pip install -r requirements.txt
 ## Current Status
 
 | Area | Status |
+| Area | Status |
 | --- | --- |
-| Phase 1 — Foundation | Complete |
-| Phase 2 — Queue Layer | Complete |
-| Phase 2 — OpenAI API, non-streaming | Complete |
-| Phase 2 — Streaming | Not implemented |
-| Phase 2 — Admin model load/unload endpoints | Not implemented |
-| End-to-end real inference | Pending model load endpoint |
-
+| Phase 1 — Foundation | ✅ Complete |
+| Phase 2 — Core API | ✅ Complete |
+| Phase 3 — Intelligence | ⏳ In Progress |
 ## Requirements
 
 | Component | Requirement |
