@@ -1,8 +1,8 @@
 {
-  "model_id": "qwen3.5-4b",
+  "model_id": "qwen3.5-4b-q4_k_m",
   "display_name": "Qwen 3.5 4B Q4_K_M",
-  "gguf_filename": "qwen3.5-4b-q4_k_m.gguf",
-  "mmproj_filename": "mmproj-BF16.gguf",
+  "gguf_filename": "Qwen3.5-4B-Q4_K_M.gguf",
+  "mmproj_filename": "mmproj-4B-BF16.gguf",
   "ctx_size": 4096,
   "gpu_layers": 28,
   "max_tokens": 2048,

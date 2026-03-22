@@ -1,2 +1,3 @@
-llama.cpp binary directory.
-Place llama-server.exe and llama-cli.exe here.
+llama.cpp build b8468
+CUDA 12.4 Windows x64
+Placed: 2026-03-22
