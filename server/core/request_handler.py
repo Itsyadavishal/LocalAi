@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
+import json
 import time
 from typing import Any
 import uuid
@@ -38,7 +40,7 @@ class RequestResult:
     request_id: str
     status_code: int
     body: dict[str, Any] | None
-    stream_iter: Any | None
+    stream_iter: AsyncIterator[str] | None
     error: str | None
 
 
@@ -269,48 +271,54 @@ class RequestHandler:
             stream=request.stream,
         )
 
-        if request.stream:
-            self._request_count += 1
-            self._error_count += 1
-            result = RequestResult(
-                request_id=request.request_id,
-                status_code=501,
-                body={"error": "Streaming not yet implemented"},
-                stream_iter=None,
-                error="streaming not implemented",
-            )
-            duration_ms = round((time.monotonic() - request.enqueued_at) * 1000)
-            self._logger.info(
-                "request complete",
-                request_id=request.request_id,
-                status_code=result.status_code,
-                duration_ms=duration_ms,
-            )
-            return result
-
         if self._client is None:
             raise RuntimeError("Request handler HTTP client is not started")
 
         target_url = f"{LLAMA_BASE_URL_TEMPLATE.format(port=self._llama_port)}{request.endpoint}"
         try:
-            response = await self._client.post(
-                target_url,
-                json=request.payload,
-                timeout=request.timeout_seconds,
-            )
-            try:
-                body = response.json()
-            except ValueError:
-                body = {"error": "Invalid JSON response from llama-server"}
-                if response.status_code < 400:
-                    response = httpx.Response(status_code=502, request=response.request, json=body)
-            result = RequestResult(
-                request_id=request.request_id,
-                status_code=response.status_code,
-                body=body,
-                stream_iter=None,
-                error=None if response.status_code < 400 else body.get("error", "request failed"),
-            )
+            if request.stream:
+                async def _line_generator() -> AsyncIterator[str]:
+                    async with self._client.stream(
+                        "POST",
+                        target_url,
+                        json=request.payload,
+                        timeout=request.timeout_seconds,
+                    ) as response:
+                        if response.status_code != 200:
+                            error_bytes = await response.aread()
+                            decoded_error = error_bytes.decode("utf-8", errors="replace") if error_bytes else "stream request failed"
+                            yield json.dumps({"error": decoded_error})
+                            return
+                        async for line in response.aiter_lines():
+                            if line:
+                                yield line
+
+                result = RequestResult(
+                    request_id=request.request_id,
+                    status_code=200,
+                    body=None,
+                    stream_iter=_line_generator(),
+                    error=None,
+                )
+            else:
+                response = await self._client.post(
+                    target_url,
+                    json=request.payload,
+                    timeout=request.timeout_seconds,
+                )
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = {"error": "Invalid JSON response from llama-server"}
+                    if response.status_code < 400:
+                        response = httpx.Response(status_code=502, request=response.request, json=body)
+                result = RequestResult(
+                    request_id=request.request_id,
+                    status_code=response.status_code,
+                    body=body,
+                    stream_iter=None,
+                    error=None if response.status_code < 400 else body.get("error", "request failed"),
+                )
         except httpx.ConnectError:
             result = RequestResult(
                 request_id=request.request_id,

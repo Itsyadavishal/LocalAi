@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+import json
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.utils.logger import get_logger
@@ -83,6 +85,34 @@ def error_response(status_code: int, message: str, error_type: str, code: str) -
     )
 
 
+async def _sse_generator(stream_iter: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Convert llama-server line streaming into SSE output.
+
+    Args:
+        stream_iter: Async line iterator returned from the request handler.
+
+    Returns:
+        SSE-formatted line stream.
+
+    Raises:
+        None.
+    """
+    saw_done = False
+    try:
+        async for line in stream_iter:
+            if not line:
+                continue
+            normalized_line = line if line.startswith("data:") else f"data: {line}"
+            if normalized_line.strip() == "data: [DONE]":
+                saw_done = True
+            yield f"{normalized_line}\n\n"
+    except Exception as error:
+        yield f"data: {json.dumps({'error': str(error)})}\n\n"
+    finally:
+        if not saw_done:
+            yield "data: [DONE]\n\n"
+
+
 @router.get("/v1/models")
 async def list_models(request: Request) -> dict[str, object]:
     """List all installed models in OpenAI-compatible format.
@@ -156,27 +186,19 @@ async def get_model(model_id: str, request: Request) -> dict[str, object] | JSON
 async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
-) -> dict[str, Any] | JSONResponse:
-    """Handle OpenAI-compatible non-streaming chat completions.
+) -> dict[str, Any] | JSONResponse | StreamingResponse:
+    """Handle OpenAI-compatible chat completions.
 
     Args:
         body: Validated chat completions request body.
         request: Incoming FastAPI request object.
 
     Returns:
-        llama-server JSON payload, or an OpenAI-style error response.
+        llama-server JSON payload, SSE stream, or an OpenAI-style error response.
 
     Raises:
         None.
     """
-    if body.stream:
-        return error_response(
-            status_code=501,
-            message="Streaming not yet implemented.",
-            error_type="not_implemented",
-            code="streaming_not_supported",
-        )
-
     model_manager = request.app.state.model_manager
     resolved_model_id = model_manager.resolve_model_id(body.model)
     if resolved_model_id is None:
@@ -200,6 +222,29 @@ async def chat_completions(
 
     payload = body.model_dump(exclude_none=True)
     handler = request.app.state.request_handler
+
+    if body.stream:
+        result = await handler.enqueue(
+            endpoint="/v1/chat/completions",
+            payload=payload,
+            stream=True,
+        )
+        if result.error:
+            return error_response(
+                status_code=result.status_code,
+                message=result.error,
+                error_type="server_error",
+                code="inference_error",
+            )
+        return StreamingResponse(
+            _sse_generator(result.stream_iter),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     result = await handler.enqueue(
         endpoint="/v1/chat/completions",
         payload=payload,
@@ -221,27 +266,19 @@ async def chat_completions(
 async def completions(
     body: CompletionRequest,
     request: Request,
-) -> dict[str, Any] | JSONResponse:
-    """Handle OpenAI-compatible non-streaming raw completions.
+) -> dict[str, Any] | JSONResponse | StreamingResponse:
+    """Handle OpenAI-compatible raw completions.
 
     Args:
         body: Validated completions request body.
         request: Incoming FastAPI request object.
 
     Returns:
-        llama-server JSON payload, or an OpenAI-style error response.
+        llama-server JSON payload, SSE stream, or an OpenAI-style error response.
 
     Raises:
         None.
     """
-    if body.stream:
-        return error_response(
-            status_code=501,
-            message="Streaming not yet implemented.",
-            error_type="not_implemented",
-            code="streaming_not_supported",
-        )
-
     model_manager = request.app.state.model_manager
     resolved_model_id = model_manager.resolve_model_id(body.model)
     if resolved_model_id is None:
@@ -262,6 +299,29 @@ async def completions(
 
     payload = body.model_dump(exclude_none=True)
     handler = request.app.state.request_handler
+
+    if body.stream:
+        result = await handler.enqueue(
+            endpoint="/v1/completions",
+            payload=payload,
+            stream=True,
+        )
+        if result.error:
+            return error_response(
+                status_code=result.status_code,
+                message=result.error,
+                error_type="server_error",
+                code="inference_error",
+            )
+        return StreamingResponse(
+            _sse_generator(result.stream_iter),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     result = await handler.enqueue(
         endpoint="/v1/completions",
         payload=payload,
