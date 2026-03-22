@@ -20,11 +20,7 @@ logs/*
 models/*/logs/*.log
 models/*/metrics/*.db
 
-# Model assets (never commit large binary files or bundled docs)
-models/*.gguf
-models/*.md
-models/*/weights/*.gguf
-models/*/vision/*.gguf
+# Model assets (never commit large binary files or bundled docs)`r`nmodels/**/*.gguf`r`nmodels/**/*.safetensors`r`nmodels/**/*.bin`r`nmodels/**/*.pt`r`nmodels/**/*.pth`r`nmodels/**/*.ckpt`r`nmodels/*.md`r`nmodels/*/model.README.md`r`nmodels/*/weights/*.md`r`nmodels/*/vision/*.md
 
 # Checksums are committed (small, important)
 # models/*/weights/*.sha256  ← do NOT ignore these
@@ -44,5 +40,5 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
-# llama.cpp binaries (too large, install separately)
-bin/*.exe
+# llama.cpp binaries (too large, install separately)`r`nbin/*.exe`r`nbin/*.dll`r`n!bin/version.txt
+
