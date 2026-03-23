@@ -14,9 +14,12 @@ Current implemented capabilities:
 - validated startup config with Pydantic v2
 - structured console and file logging
 - NVIDIA GPU detection and live VRAM reporting
-- model discovery from `models/`
+- model discovery from `models/` with three installed variants: `qwen3.5-4b-q4_k_m`, `qwen3.5-4b-q8_0`, `qwen3.5-9b`
 - OpenAI-compatible `/v1/models`, `/v1/chat/completions`, and `/v1/completions`
 - async request queueing in front of `llama-server.exe`
+- SSE streaming for chat and completions
+- health monitoring and metrics collection
+- admin endpoints for model load, unload, status, metrics, and shutdown
 - graceful shutdown through `POST /localai/shutdown`
 
 ## Quick Start In 60 Seconds
@@ -58,11 +61,10 @@ pip install -r requirements.txt
 ## Current Status
 
 | Area | Status |
-| Area | Status |
 | --- | --- |
 | Phase 1 — Foundation | ✅ Complete |
 | Phase 2 — Core API | ✅ Complete |
-| Phase 3 — Intelligence | ⏳ In Progress |
+| Phase 3 — Intelligence | ✅ Complete |
 ## Requirements
 
 | Component | Requirement |
@@ -80,13 +82,13 @@ pip install -r requirements.txt
 | GET | `/health` | Live | Returns status, VRAM, queue depth |
 | GET | `/v1/models` | Live | Lists discovered models |
 | GET | `/v1/models/{model_id}` | Live | Supports fuzzy model matching |
-| POST | `/v1/chat/completions` | Live, non-streaming only | Returns `501` if `stream=true` |
-| POST | `/v1/completions` | Live, non-streaming only | Returns `501` if `stream=true` |
+| POST | `/v1/chat/completions` | Live | Supports non-streaming and SSE streaming |
+| POST | `/v1/completions` | Live | Supports non-streaming and SSE streaming |
 | POST | `/localai/shutdown` | Live | Used by `stop.ps1` |
-| POST | `/localai/models/load` | Planned | Required before real inference requests |
-| POST | `/localai/models/unload` | Planned | Required for model lifecycle control |
-| GET | `/localai/status` | Planned | Runtime summary endpoint |
-| GET | `/localai/metrics` | Planned | Metrics snapshot endpoint |
+| POST | `/localai/models/load` | Live | Loads an installed model into llama-server |
+| POST | `/localai/models/unload` | Live | Stops the current model cleanly |
+| GET | `/localai/status` | Live | Runtime summary endpoint |
+| GET | `/localai/metrics` | Live | Metrics snapshot endpoint |
 
 ## OpenAI Compatibility Notes
 
@@ -109,7 +111,7 @@ Current behavior:
 
 - unknown request fields are preserved and forwarded to `llama-server`
 - `None` values are stripped before queueing so `llama-server` does not reject the payload
-- streaming is not implemented yet and returns `501`
+- streaming requests are proxied as SSE to the client
 
 ## Model Naming Convention
 
@@ -199,8 +201,6 @@ C:\LocalAi\
 ## Current Limitations
 
 - a model must be loaded before inference requests can succeed
-- the admin model load endpoint is not implemented yet
-- streaming responses are not implemented yet
 - Windows is the primary target environment right now
 
 ## Development Notes

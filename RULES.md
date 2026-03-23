@@ -85,11 +85,7 @@
 - Use imperative mood: "add", "fix", "remove" — not "added", "fixes"
 - Never commit directly to main — always use a feature branch
 
-## 9. Known Technical Debt
-
-- model_manager.py reads llama_server_bin and llama_server_port
-  directly from global config instead of constructor injection.
-  Fix in Phase 3 refactor pass.
+## 9. No known technical debt
 
 ## 10. Uvicorn Instantiation
 
