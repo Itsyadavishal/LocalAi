@@ -1,103 +1,134 @@
 <div align="center">
   <h1>LocalAi</h1>
-  <p><strong>Windows-first local inference infrastructure with an OpenAI-compatible API</strong></p>
-  <p>Config-validated | Queue-backed | VRAM-aware | Graceful shutdown</p>
-  <p><code>127.0.0.1:8080</code> API | <code>llama-server.exe</code> backend | <code>Python 3.11+</code></p>
+  <p><strong>Windows-first local inference fabric for llama.cpp with an OpenAI-compatible API</strong></p>
+  <p>
+    <code>FastAPI</code>
+    <code>llama-server.exe</code>
+    <code>CUDA / NVIDIA VRAM aware</code>
+    <code>SSE streaming</code>
+    <code>OpenAI SDK compatible</code>
+  </p>
 </div>
+
+```text
++--------------------------------------------------------------------------------+
+|  LOCALAI                                                                       |
+|  Local-first inference control plane for Windows                               |
+|                                                                                |
+|  Clients             Queue              Runtime               Telemetry        |
+|  OpenClaw            async FIFO         llama-server.exe      /health          |
+|  AUREX               single worker      model lifecycle       /localai/status  |
+|  OpenAI SDK          SSE / JSON         VRAM decisions        /localai/metrics |
++--------------------------------------------------------------------------------+
+```
 
 ## Overview
 
-LocalAi is a standalone local inference server for Windows systems using `llama.cpp`. It exposes an OpenAI-compatible HTTP surface so local clients can switch to a local `base_url` without changing request structure.
+LocalAi is a production-ready local inference server built for Windows systems running `llama.cpp`. It provides one stable API surface in front of local models, GPU-aware loading, request queueing, live health reporting, structured logs, and OpenAI-compatible chat/completion endpoints.
 
-Current implemented capabilities:
+The design goal is simple: local clients should switch from a remote provider to LocalAi by changing only `base_url` and model name, without rewriting request payloads.
 
-- validated startup config with Pydantic v2
-- structured console and file logging
-- NVIDIA GPU detection and live VRAM reporting
-- model discovery from `models/` with three installed variants: `qwen3.5-4b-q4_k_m`, `qwen3.5-4b-q8_0`, `qwen3.5-9b`
-- OpenAI-compatible `/v1/models`, `/v1/chat/completions`, and `/v1/completions`
-- async request queueing in front of `llama-server.exe`
-- SSE streaming for chat and completions
-- health monitoring and metrics collection
-- admin endpoints for model load, unload, status, metrics, and shutdown
-- graceful shutdown through `POST /localai/shutdown`
+## Why LocalAi
 
-## Quick Start In 60 Seconds
+- One local API for multiple installed model variants
+- OpenAI-compatible request and response shapes
+- SSE streaming support for chat and completions
+- GPU-aware loading decisions based on live VRAM
+- Clean Windows process lifecycle for `llama-server.exe`
+- Structured logs, runtime metrics, and health monitoring
+- Admin endpoints for load, unload, status, metrics, and shutdown
 
-1. Open the project in `C:\LocalAi`.
-2. Activate the project environment first:
+## System View
 
-```powershell
-.\venv\Scripts\activate
+```mermaid
+flowchart LR
+    A["Client\nAUREX / OpenClaw / OpenAI SDK"] --> B["FastAPI API Layer\n/v1 + /localai"]
+    B --> C["Request Handler\nasync queue + dispatch"]
+    C --> D["llama-server.exe\n127.0.0.1:8081"]
+    D --> C
+    C --> B
+    B --> E["Metrics + Health Monitor"]
+    B --> F["Model Manager\nVRAM + load lifecycle"]
+    F --> D
 ```
 
-1. If `venv` does not exist yet:
-
-```powershell
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-1. Place `llama-server.exe` in `C:\LocalAi\bin\`.
-2. Start the server:
-
-```powershell
-.\start.ps1
-```
-
-1. Check status:
-
-```powershell
-.\status.ps1
-```
-
-1. Stop the server:
-
-```powershell
-.\stop.ps1
-```
-
-## Current Status
+## Current State
 
 | Area | Status |
 | --- | --- |
-| Phase 1 — Foundation | ✅ Complete |
-| Phase 2 — Core API | ✅ Complete |
-| Phase 3 — Intelligence | ✅ Complete |
-## Requirements
+| Phase 1 - Foundation | Complete |
+| Phase 2 - Core API | Complete |
+| Phase 3 - Intelligence | Complete |
+| Release | `v1.0.0` |
 
-| Component | Requirement |
-| --- | --- |
-| OS | Windows 11 |
-| Python | 3.11+ |
-| GPU | NVIDIA GPU supported by `pynvml` |
-| Inference backend | `llama-server.exe` from `llama.cpp` |
-| RAM | 8 GB minimum, 16 GB+ recommended |
+## Installed Models
 
-## Current Vs Planned Endpoints
+Current installed model IDs:
 
-| Method | Path | State | Notes |
-| --- | --- | --- | --- |
-| GET | `/health` | Live | Returns status, VRAM, queue depth |
-| GET | `/v1/models` | Live | Lists discovered models |
-| GET | `/v1/models/{model_id}` | Live | Supports fuzzy model matching |
-| POST | `/v1/chat/completions` | Live | Supports non-streaming and SSE streaming |
-| POST | `/v1/completions` | Live | Supports non-streaming and SSE streaming |
-| POST | `/localai/shutdown` | Live | Used by `stop.ps1` |
-| POST | `/localai/models/load` | Live | Loads an installed model into llama-server |
-| POST | `/localai/models/unload` | Live | Stops the current model cleanly |
-| GET | `/localai/status` | Live | Runtime summary endpoint |
-| GET | `/localai/metrics` | Live | Metrics snapshot endpoint |
+- `qwen3.5-4b-q4_k_m`
+- `qwen3.5-4b-q8_0`
+- `qwen3.5-9b`
 
-## OpenAI Compatibility Notes
+Current layout:
 
-LocalAi is aiming for drop-in compatibility by changing only `base_url`.
+```text
+models/
+|- qwen3.5-4b-q4_k_m/
+|  |- model.config.json
+|  |- weights/Qwen3.5-4B-Q4_K_M.gguf
+|  `- vision/mmproj-4B-BF16.gguf
+|- qwen3.5-4b-q8_0/
+|  |- model.config.json
+|  |- weights/Qwen3.5-4B-Q8_0.gguf
+|  `- vision/mmproj-4B-BF16.gguf
+`- qwen3.5-9b/
+   |- model.config.json
+   |- weights/Qwen3.5-9B-Q4_K_M.gguf
+   `- vision/mmproj-9B-BF16.gguf
+```
 
-Current behavior:
+Notes:
 
-- OpenAI-style request models for chat and completions
-- OpenAI-style error envelope:
+- The two 4B variants share the same `mmproj-4B-BF16.gguf` payload via hard link.
+- Discovery is model-folder based, not root-folder `.gguf` based.
+- `model_id`, folder name, and `model.config.json` must match exactly.
+
+## API Surface
+
+### Core endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Lightweight runtime health, queue depth, VRAM summary |
+| `GET` | `/v1/models` | OpenAI-compatible model listing |
+| `GET` | `/v1/models/{model_id}` | OpenAI-compatible model details with fuzzy resolution |
+| `POST` | `/v1/chat/completions` | Chat completions, JSON or SSE streaming |
+| `POST` | `/v1/completions` | Raw completions, JSON or SSE streaming |
+
+### Admin endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/localai/status` | Full runtime summary |
+| `GET` | `/localai/metrics` | VRAM, queue, uptime, per-model request stats |
+| `POST` | `/localai/models/load` | Load a discovered model |
+| `POST` | `/localai/models/unload` | Unload the active model |
+| `POST` | `/localai/shutdown` | Graceful application shutdown |
+
+## OpenAI Compatibility
+
+LocalAi is compatible with the OpenAI Python SDK and OpenAI-style HTTP clients.
+
+Supported behavior:
+
+- OpenAI-style chat/completion request bodies
+- OpenAI-style error envelope
+- OpenAI-style model listing
+- extra request fields forwarded to `llama-server`
+- `None` values stripped before dispatch so `llama-server` does not reject payloads
+- SSE streaming for `stream=true`
+
+Error envelope format:
 
 ```json
 {
@@ -109,106 +140,213 @@ Current behavior:
 }
 ```
 
-- unknown request fields are preserved and forwarded to `llama-server`
-- `None` values are stripped before queueing so `llama-server` does not reject the payload
-- streaming requests are proxied as SSE to the client
+Minimal SDK example:
 
-## Model Naming Convention
+```python
+from openai import OpenAI
 
-Use one folder per discoverable model variant.
+client = OpenAI(
+    base_url="http://127.0.0.1:8080/v1",
+    api_key="localai",
+)
 
-Current naming pattern:
+response = client.chat.completions.create(
+    model="qwen3.5-4b-q4_k_m",
+    messages=[
+        {"role": "system", "content": "Answer concisely."},
+        {"role": "user", "content": "What is LocalAi?"},
+    ],
+    max_tokens=128,
+)
 
-- `qwen3.5-4b-q8_0`
-- `qwen3.5-4b-q4_k_m`
-- `qwen3.5-9b`
-
-Recommended rule:
-
-- use architecture and size as the base model name
-- add quantization suffix only when multiple variants of the same size exist
-- keep `model_id`, folder name, and `model.config.json` aligned exactly
-
-## Current Model Layout
-
-Each discovered model must have its own folder with:
-
-- `model.config.json`
-- `weights\<model>.gguf`
-- `vision\<mmproj>.gguf` when vision is required
-
-Current installed models:
-
-- `qwen3.5-4b-q8_0`
-- `qwen3.5-4b-q4_k_m`
-- `qwen3.5-9b`
-
-Example structure:
-
-```text
-models\
-├── qwen3.5-4b-q8_0\
-│   ├── model.config.json
-│   ├── weights\Qwen3.5-4B-Q8_0.gguf
-│   └── vision\mmproj-4B-BF16.gguf
-├── qwen3.5-4b-q4_k_m\
-│   ├── model.config.json
-│   ├── weights\Qwen3.5-4B-Q4_K_M.gguf
-│   └── vision\mmproj-4B-BF16.gguf
-└── qwen3.5-9b\
-    ├── model.config.json
-    ├── weights\Qwen3.5-9B-Q4_K_M.gguf
-    └── vision\mmproj-9B-BF16.gguf
+print(response.choices[0].message.content)
 ```
 
-Important note:
+## Quick Start
 
-- the two 4B variants share the same `mmproj-4B-BF16.gguf` payload through a hard link, so Explorer shows two entries but disk allocation is not duplicated
-- discovery is per model folder, not per `.gguf` file
+### 1. Environment
 
-## Configuration Defaults
+```powershell
+cd C:\LocalAi
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-The default runtime config in [localai.config.json](/c:/LocalAi/localai.config.json) is:
+### 2. Runtime binaries
 
-- API host: `127.0.0.1`
-- API port: `8080`
-- llama-server port: `8081`
-- request timeout: `120` seconds
-- max queue depth: `20`
-- VRAM safety margin: `300 MB`
-- runtime overhead estimate: `200 MB`
-- log directory: `logs`
+Place the `llama.cpp` Windows CUDA runtime in [bin](/c:/LocalAi/bin):
 
-## Project Structure
+- `llama-server.exe`
+- `ggml-*.dll`
+- CUDA runtime DLLs required by your build
+- keep [bin/version.txt](/c:/LocalAi/bin/version.txt) updated
+
+### 3. Start the server
+
+```powershell
+.\start.ps1
+```
+
+### 4. Load a model
+
+```powershell
+curl -X POST http://localhost:8080/localai/models/load `
+  -H "Content-Type: application/json" `
+  -d '{"model_id": "qwen3.5-4b-q4_k_m"}'
+```
+
+### 5. Send an inference request
+
+```powershell
+curl -X POST http://localhost:8080/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -d '{
+    "model": "qwen3.5-4b-q4_k_m",
+    "messages": [{"role": "user", "content": "Say hello."}],
+    "max_tokens": 64,
+    "chat_template_kwargs": {"enable_thinking": false}
+  }'
+```
+
+### 6. Stop the server
+
+```powershell
+.\stop.ps1
+```
+
+## Runtime Flow
 
 ```text
-C:\LocalAi\
-├── server\
-│   ├── api\        OpenAI-compatible endpoints, admin endpoints, router registration
-│   ├── config\     Pydantic schemas and config loading
-│   ├── core\       Engine lifecycle, model discovery, queueing, VRAM decisions
-│   └── utils\      Logging and GPU helpers
-├── models\         Model folders and per-model configs
-├── bin\            `llama-server.exe` location
-├── logs\           Runtime logs
-├── data\           PID file and runtime state
-├── scripts\        PowerShell helper scripts
-├── start.ps1        Start LocalAi in the background
-├── stop.ps1         Graceful shutdown through the local API
-└── status.ps1       Health and runtime summary
+Client request
+  -> FastAPI endpoint
+  -> RequestHandler enqueue
+  -> llama-server.exe
+  -> JSON or SSE response
+  -> metrics + logs updated
 ```
+
+## Observability
+
+LocalAi ships with runtime visibility built in.
+
+### Health
+
+`GET /health` returns:
+
+- service status
+- version
+- whether a model is loaded
+- live VRAM used / total
+- current queue depth
+
+### Status
+
+`GET /localai/status` returns:
+
+- engine state and PID
+- loaded model details
+- current VRAM snapshot
+- queue state
+- uptime
+- health monitor status
+
+### Metrics
+
+`GET /localai/metrics` returns:
+
+- uptime
+- server version
+- VRAM used/free/total
+- queue depth and totals
+- per-model request count
+- per-model error count
+- per-model average latency
+- last-used timestamp per model
+
+### Logging
+
+Structured logs are written to [logs/localai.log](/c:/LocalAi/logs/localai.log).
+
+Logging design:
+
+- colored human-readable console output
+- JSON log file output
+- rotating daily log file
+- request lifecycle logging
+- VRAM snapshot logging
+
+## Helper Scripts
+
+| Script | Purpose |
+| --- | --- |
+| [start.ps1](/c:/LocalAi/start.ps1) | Start LocalAi in the background |
+| [stop.ps1](/c:/LocalAi/stop.ps1) | Graceful shutdown through API |
+| [status.ps1](/c:/LocalAi/status.ps1) | Quick runtime status summary |
+| [validate_models.ps1](/c:/LocalAi/scripts/validate_models.ps1) | Verify `.gguf` files against `.sha256` sidecars |
+| [add_model.ps1](/c:/LocalAi/scripts/add_model.ps1) | Register a new already-downloaded model scaffold |
+| [migrate_aurex.ps1](/c:/LocalAi/scripts/migrate_aurex.ps1) | Generate AUREX migration guidance and helper client |
+| [test_aurex_connection.py](/c:/LocalAi/scripts/test_aurex_connection.py) | Validate OpenAI SDK compatibility end to end |
+
+## Configuration
+
+Primary config file: [localai.config.json](/c:/LocalAi/localai.config.json)
+
+Key defaults:
+
+| Setting | Default |
+| --- | --- |
+| API host | `127.0.0.1` |
+| API port | `8080` |
+| llama-server port | `8081` |
+| request timeout | `120` seconds |
+| max queue depth | `20` |
+| VRAM safety margin | `300 MB` |
+| runtime overhead estimate | `200 MB` |
+| log directory | `logs` |
+
+## Repository Layout
+
+```text
+C:\LocalAi
+|- server/
+|  |- api/       OpenAI-compatible and admin endpoints
+|  |- config/    Pydantic schemas and config loader
+|  |- core/      Engine, queue, model, VRAM, monitor, metrics logic
+|  `- utils/     Logging, checksum, GPU, and process helpers
+|- models/       Per-model folders and configs
+|- bin/          llama.cpp runtime binaries
+|- logs/         JSON runtime logs
+|- data/         PID and runtime state files
+|- scripts/      Helper scripts and SDK compatibility test
+|- start.ps1
+|- stop.ps1
+`- status.ps1
+```
+
+## Requirements
+
+| Component | Requirement |
+| --- | --- |
+| OS | Windows 11 recommended |
+| Python | 3.11+ |
+| GPU | NVIDIA GPU supported by `pynvml` |
+| Inference backend | `llama-server.exe` from `llama.cpp` |
+| RAM | 8 GB minimum, 16 GB+ recommended |
+| VRAM | Depends on selected model variant |
 
 ## Current Limitations
 
-- a model must be loaded before inference requests can succeed
-- Windows is the primary target environment right now
+- A model must be loaded before inference requests can succeed.
+- Runtime binaries from `llama.cpp` are not shipped in this repo and must be placed in `bin/` manually.
+- Windows is the primary target environment.
 
 ## Development Notes
 
-- always use the project virtual environment
-- always start from `C:\LocalAi`
-- use `uvicorn.Config(app=app, ...)`, not string-form app loading, when running via `python -m`
-- models and `.gguf` files are intentionally ignored by Git
+- Always use the project virtual environment.
+- Always run from `C:\LocalAi`.
+- Always use `uvicorn.Config(app=app, ...)`, never string-form app loading under `python -m`.
+- Model binaries, runtime DLLs, `.gguf`, and similar artifacts are intentionally ignored by Git.
 
 ## License
 
