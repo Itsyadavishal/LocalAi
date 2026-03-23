@@ -60,6 +60,26 @@ async def get_status(request: Request) -> dict[str, object]:
     return status_snapshot
 
 
+@router.get("/metrics")
+async def get_metrics(request: Request) -> dict[str, object]:
+    """Return runtime performance metrics from the metrics collector.
+
+    Includes uptime, VRAM, queue statistics, per-model request counters,
+    latency aggregates, and the currently loaded model identifier.
+
+    Args:
+        request: Incoming FastAPI request object.
+
+    Returns:
+        Metrics collector snapshot dictionary.
+
+    Raises:
+        None.
+    """
+    collector = request.app.state.metrics_collector
+    return collector.get_snapshot()
+
+
 @router.post("/models/load", response_model=None)
 async def load_model(body: LoadModelRequest, request: Request) -> dict[str, object] | JSONResponse:
     """Load a model into the shared inference engine.
