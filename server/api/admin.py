@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -11,12 +10,10 @@ import uvicorn
 
 from server.config.schemas import LoadModelRequest
 from server.core.inference_engine import engine
-from server.utils.gpu_utils import get_vram_info
 from server.utils.logger import get_logger
 
 router = APIRouter(prefix="/localai", tags=["admin"])
 logger = get_logger(__name__)
-SERVER_START_MONOTONIC = time.monotonic()
 
 
 @router.post("/shutdown")
@@ -53,44 +50,14 @@ async def get_status(request: Request) -> dict[str, object]:
         request: Incoming FastAPI request object.
 
     Returns:
-        Current engine, model, VRAM, queue, and uptime status.
+        Current engine, model, VRAM, queue, uptime, and monitor status.
 
     Raises:
         None.
     """
-    model_manager = request.app.state.model_manager
-    handler = request.app.state.request_handler
-    engine_status = engine.get_status()
-    vram = get_vram_info()
-    handler_stats = handler.get_stats()
-
-    loaded_id = model_manager.get_loaded_model_id()
-    loaded_model = model_manager.get_model(loaded_id) if loaded_id else None
-
-    return {
-        "status": "ok",
-        "version": "0.1.0",
-        "engine": {
-            "running": engine_status.running,
-            "pid": engine_status.pid,
-            "port": engine_status.port,
-            "model_path": engine_status.model_path,
-            "error": engine_status.error,
-        },
-        "model": {
-            "loaded": loaded_id is not None,
-            "model_id": loaded_id,
-            "display_name": loaded_model.config.display_name if loaded_model else None,
-        },
-        "vram": {
-            "gpu_name": vram.gpu_name,
-            "used_mb": vram.used_mb,
-            "free_mb": vram.free_mb,
-            "total_mb": vram.total_mb,
-        },
-        "queue": handler_stats,
-        "uptime_seconds": int(time.monotonic() - SERVER_START_MONOTONIC),
-    }
+    status_snapshot = request.app.state.metrics_collector.collect_runtime_status().to_dict()
+    status_snapshot["monitor"] = request.app.state.health_monitor.get_status()
+    return status_snapshot
 
 
 @router.post("/models/load", response_model=None)
@@ -208,4 +175,3 @@ async def unload_model(request: Request) -> dict[str, object]:
         "model_unloaded": True,
         "model_id": loaded_id,
     }
-
