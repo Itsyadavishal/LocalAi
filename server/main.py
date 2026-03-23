@@ -98,7 +98,12 @@ async def lifespan(app_instance: FastAPI) -> AsyncIterator[None]:
 
     gpu_available = init_gpu()
     app_instance.state.gpu_available = gpu_available
-    model_manager = ModelManager(models_dir=config.models.models_dir, engine=engine)
+    model_manager = ModelManager(
+        models_dir=config.models.models_dir,
+        engine=engine,
+        llama_server_bin=config.inference.llama_server_bin,
+        llama_server_port=config.inference.llama_server_port,
+    )
     app_instance.state.model_manager = model_manager
     discovered = model_manager.discover_models()
     logger.info("models discovered", count=len(discovered), models=discovered)

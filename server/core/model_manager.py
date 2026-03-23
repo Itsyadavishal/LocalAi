@@ -8,7 +8,6 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from server.config.config_loader import load_config
 from server.config.schemas import ModelConfig
 from server.core.inference_engine import EngineConfig, InferenceEngine
 from server.core.vram_manager import LoadDecision, decide_load, estimate_vram_requirement
@@ -18,7 +17,6 @@ from server.utils.logger import get_logger
 MODEL_CONFIG_FILENAME: str = "model.config.json"
 WEIGHTS_SUBDIR: str = "weights"
 VISION_SUBDIR: str = "vision"
-ROOT_CONFIG_FILENAME: str = "localai.config.json"
 
 
 @dataclass(slots=True)
@@ -35,12 +33,20 @@ class InstalledModel:
 class ModelManager:
     """Track installed models and coordinate engine load and unload operations."""
 
-    def __init__(self, models_dir: str, engine: InferenceEngine) -> None:
+    def __init__(
+        self,
+        models_dir: str,
+        engine: InferenceEngine,
+        llama_server_bin: str,
+        llama_server_port: int,
+    ) -> None:
         """Initialize the model manager with resolved runtime paths.
 
         Args:
             models_dir: Root directory containing per-model folders.
             engine: Shared inference engine instance used for loading models.
+            llama_server_bin: Path to the llama-server executable.
+            llama_server_port: Port used by the llama-server subprocess.
 
         Returns:
             None.
@@ -57,12 +63,11 @@ class ModelManager:
         self._loaded_model_id: str | None = None
         self._logger = get_logger(__name__)
 
-        runtime_config = load_config(str(self._project_root / ROOT_CONFIG_FILENAME))
-        llama_bin_path = Path(runtime_config.inference.llama_server_bin)
+        llama_bin_path = Path(llama_server_bin)
         self._llama_bin = (
             llama_bin_path if llama_bin_path.is_absolute() else self._project_root / llama_bin_path
         ).resolve()
-        self._llama_port = runtime_config.inference.llama_server_port
+        self._llama_port = llama_server_port
 
     def discover_models(self) -> list[str]:
         """Scan the models directory for valid model installations.
