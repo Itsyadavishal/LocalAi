@@ -35,7 +35,7 @@ if ($portInUse) {
     exit 1
 }
 
-if (-not (Test-Path ".\venv\Scripts\Activate.ps1")) {
+if (-not (Test-Path ".\venv\Scripts\Activate.ps1") -or -not (Test-Path ".\venv\Scripts\python.exe")) {
     Write-Host "Error: venv not found. Run: python -m venv venv"
     exit 1
 }
@@ -57,7 +57,8 @@ foreach ($arg in $args) {
 
 & .\venv\Scripts\Activate.ps1
 
-$process = Start-Process -FilePath "python" `
+$pythonExe = (Resolve-Path ".\venv\Scripts\python.exe").Path
+$process = Start-Process -FilePath $pythonExe `
     -ArgumentList "-m", "server.main" `
     -NoNewWindow `
     -PassThru

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import sys
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from rich import print as rich_print
 
 from server.api.router import register_routers
@@ -173,6 +173,33 @@ async def health_endpoint(request: Request) -> dict[str, object]:
     """Return the current service health and VRAM snapshot."""
     _ = request.app.state.config
     return request.app.state.metrics_collector.collect_health_snapshot().to_dict()
+
+
+@app.get("/")
+async def root_endpoint() -> dict[str, object]:
+    """Return a lightweight root document for browser and probe requests."""
+    return {
+        "name": APP_TITLE,
+        "version": APP_VERSION,
+        "status": "ok",
+        "docs": ["/health", "/v1/models", "/localai/status", "/localai/metrics"],
+    }
+
+
+@app.get("/v1")
+async def openai_root_endpoint() -> dict[str, object]:
+    """Return a lightweight API root document for OpenAI namespace probes."""
+    return {
+        "object": "api",
+        "version": APP_VERSION,
+        "endpoints": ["/v1/models", "/v1/chat/completions", "/v1/completions"],
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_endpoint() -> Response:
+    """Return an empty favicon response to avoid noisy browser 404 probes."""
+    return Response(status_code=204)
 
 
 if __name__ == "__main__":
